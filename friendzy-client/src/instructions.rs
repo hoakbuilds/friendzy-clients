@@ -4,11 +4,62 @@ use anchor_lang::{
 };
 use anchor_spl::{associated_token, token::spl_token};
 
-#[derive(Debug, Default, Clone, PartialEq, AnchorSerialize, AnchorDeserialize)]
-pub struct SwapArgs {
-    data: Vec<u8>,
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct VerifyArgs {
+    pub id: u64,
+    pub owner: Pubkey,
+}
 
-    bump: u8,
+impl VerifyArgs {
+    pub const LEN: usize = 42;
+    pub const VERSION_INDEX: usize = 0;
+    pub const ID_INDEX: usize = 1;
+    pub const PADDING_INDEX: usize = 9;
+    pub const OWNER_INDEX: usize = 10;
+
+    pub fn try_from_slice(data: &[u8]) -> Result<Self> {
+        if data.len() != Self::LEN {
+            return Err(ProgramError::InvalidInstructionData.into());
+        }
+
+        let id = u64::try_from_slice(&data[Self::ID_INDEX..Self::PADDING_INDEX]).unwrap();
+        let owner = Pubkey::try_from_slice(&data[Self::OWNER_INDEX..]).unwrap();
+
+        Ok(Self { id, owner })
+    }
+
+    pub fn to_vec(&self) -> Vec<u8> {
+        create_verify_instruction_data(&self.owner, self.id)
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct WithdrawArgs {
+    pub id: u64,
+}
+
+impl WithdrawArgs {
+    pub const LEN: usize = 10;
+    pub const VERSION_INDEX: usize = 0;
+    pub const ID_INDEX: usize = 1;
+    pub const PADDING_INDEX: usize = 9;
+
+    pub fn try_from_slice(data: &[u8]) -> Result<Self> {
+        if data.len() != Self::LEN {
+            return Err(ProgramError::InvalidInstructionData.into());
+        }
+        let id = u64::try_from_slice(&data[Self::ID_INDEX..Self::PADDING_INDEX]).unwrap();
+
+        Ok(Self { id })
+    }
+
+    pub fn to_vec(&self) -> Vec<u8> {
+        create_withdraw_instruction_data(self.id)
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct SwapArgs {
     pub id: u64,
     pub side: Side,
     pub amount: u64,
@@ -16,54 +67,32 @@ pub struct SwapArgs {
 }
 
 impl SwapArgs {
-    // These are buy/sell ix:
-    // Buy: [0, id, 1, amount, max_price]
-    // Sell: [0, id, 2, amount, min_price]
     pub const LEN: usize = 26;
-    pub const BUMP_OFFSET: usize = 0;
-    pub const ID_OFFSET: usize = 1;
-    pub const SIDE_OFFSET: usize = 9;
-    pub const AMOUNT_OFFSET: usize = 10;
-    pub const PRICE_OFFSET: usize = 18;
+    pub const VERSION_INDEX: usize = 0;
+    pub const ID_INDEX: usize = 1;
+    pub const SIDE_INDEX: usize = 9;
+    pub const AMOUNT_INDEX: usize = 10;
+    pub const PRICE_INDEX: usize = 18;
 
-    pub fn try_from_slice(data: &[u8]) -> Self {
-        let bump = u8::try_from_slice(&data[Self::BUMP_OFFSET..Self::ID_OFFSET]).unwrap();
-        let id = u64::try_from_slice(&data[Self::ID_OFFSET..Self::SIDE_OFFSET]).unwrap();
-        let side = Side::try_from_slice(&data[Self::SIDE_OFFSET..Self::AMOUNT_OFFSET]).unwrap();
-        let amount = u64::try_from_slice(&data[Self::AMOUNT_OFFSET..Self::PRICE_OFFSET]).unwrap();
-        let price = u64::try_from_slice(&data[Self::PRICE_OFFSET..Self::LEN]).unwrap();
-        Self {
-            data: data.to_vec(),
-            bump,
+    pub fn try_from_slice(data: &[u8]) -> Result<Self> {
+        if data.len() != Self::LEN {
+            return Err(ProgramError::InvalidInstructionData.into());
+        }
+        let id = u64::try_from_slice(&data[Self::ID_INDEX..Self::SIDE_INDEX]).unwrap();
+        let side = Side::try_from_slice(&data[Self::SIDE_INDEX..Self::AMOUNT_INDEX]).unwrap();
+        let amount = u64::try_from_slice(&data[Self::AMOUNT_INDEX..Self::PRICE_INDEX]).unwrap();
+        let price = u64::try_from_slice(&data[Self::PRICE_INDEX..]).unwrap();
+
+        Ok(Self {
             id,
             side,
             amount,
             price,
-        }
+        })
     }
 
     pub fn to_vec(&self) -> Vec<u8> {
-        create_swap_instruction_data(self.id, self.amount, self.price, self.side)
-    }
-
-    pub fn bump(&self) -> u8 {
-        self.bump
-    }
-
-    pub fn id(&self) -> u64 {
-        self.id
-    }
-
-    pub fn side(&self) -> Side {
-        self.side
-    }
-
-    pub fn amount(&self) -> u64 {
-        self.amount
-    }
-
-    pub fn price(&self) -> u64 {
-        self.price
+        create_withdraw_instruction_data(self.id)
     }
 }
 
@@ -89,7 +118,7 @@ pub async fn swap(
     amount: u64,
     price: u64,
     side: Side,
-) -> Result<Instruction> {
+) -> Instruction {
     let mut accounts = vec![
         AccountMeta::new(*user, true),                        // 0 - user
         AccountMeta::new(*bank, false),                       // 1 - bank
@@ -120,16 +149,45 @@ pub async fn swap(
         AccountMeta::new_readonly(associated_token::ID, false), // 12 - ata program
     ]);
 
-    Ok(Instruction {
+    Instruction {
         program_id: crate::id(),
-        accounts: accounts,
+        accounts,
         data: create_swap_instruction_data(id, amount, price, side),
-    })
+    }
 }
 
+pub async fn withdraw(
+    user: &Pubkey,
+    bank: &Pubkey,
+    config: &Pubkey,
+    token_mint: &Pubkey,
+    profile: &Pubkey,
+    id: u64,
+) -> Instruction {
+    Instruction {
+        program_id: crate::id(),
+        accounts: vec![
+            AccountMeta::new(*user, true),                        // 0 - user
+            AccountMeta::new(*bank, false),                       // 1 - bank
+            AccountMeta::new(*profile, false),                    // 2 - config
+            AccountMeta::new(*token_mint, false),                 // 3 - token mint
+            AccountMeta::new(*config, false),                     // 4 - profile
+            AccountMeta::new_readonly(spl_token::id(), false),    // 5 - spl token program
+            AccountMeta::new_readonly(Rent::id(), false),         // 6 - rent
+            AccountMeta::new_readonly(system_program::ID, false), // 7 - system program
+            AccountMeta::new_readonly(system_program::ID, false), // 8 - placeholder
+            AccountMeta::new_readonly(system_program::ID, false), // 9 - placeholder
+            AccountMeta::new_readonly(system_program::ID, false), // 10 - placeholder
+        ],
+        data: create_withdraw_instruction_data(id),
+    }
+}
+
+/// Buy: [0, id, 1, amount, max_price]
+/// Sell: [0, id, 2, amount, min_price]
 fn create_swap_instruction_data(id: u64, amount: u64, price: u64, side: Side) -> Vec<u8> {
     let mut data = Vec::new();
-    data.push(0); // offset 0
+    data.push(0); // 0 - padding ?
     data.extend(id.to_le_bytes()); // 1
     side.serialize(&mut data).unwrap(); // offset 9
     data.extend(amount.to_le_bytes()); // 10
@@ -137,8 +195,29 @@ fn create_swap_instruction_data(id: u64, amount: u64, price: u64, side: Side) ->
     data
 }
 
+/// Withdraw: [0, id, 3]
+fn create_withdraw_instruction_data(id: u64) -> Vec<u8> {
+    let mut data = Vec::new();
+    data.push(0); // 0 - padding ?
+    data.extend(id.to_le_bytes()); // 1 - amount
+    data.push(3); // 9
+    data
+}
+
+/// Verify: [0, id, owner]
+fn create_verify_instruction_data(owner: &Pubkey, id: u64) -> Vec<u8> {
+    let mut data = Vec::new();
+    data.push(0); // 0 - padding ?
+    data.extend(id.to_le_bytes()); // 1 - amount
+    data.push(0); // 0 - padding ?
+    data.extend(owner.to_bytes()); // 9 - owner
+    data
+}
+
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     use base64::{engine::general_purpose, Engine};
 
@@ -148,8 +227,9 @@ mod tests {
 
     #[test]
     fn test_create_swap_instruction() -> Result<()> {
-        let buy_data_10_fren = decode_base64("AACg11IlVCEQAQDkC1QCAAAAlsmCHAAAAAA=");
-        let swap_args = SwapArgs::try_from_slice(&buy_data_10_fren);
+        let data = decode_base64("AACg11IlVCEQAQDkC1QCAAAAlsmCHAAAAAA=");
+        println!("data: {:?}", data);
+        let swap_args = SwapArgs::try_from_slice(&data).unwrap();
         assert_eq!(1_162_302_698_118_684_672, swap_args.id);
         assert_eq!(10000000000, swap_args.amount);
         assert_eq!(Side::Buy, swap_args.side);
@@ -161,15 +241,16 @@ mod tests {
             478333334,
             Side::Buy,
         );
-        assert_eq!(buy_data_10_fren, ix_data);
+        assert_eq!(data, ix_data);
 
         Ok(())
     }
 
     #[test]
     fn test_buy_instruction_data() -> Result<()> {
-        let buy_data_10_fren = decode_base64("AACg11IlVCEQAQDkC1QCAAAAlsmCHAAAAAA=");
-        let swap_args = SwapArgs::try_from_slice(&buy_data_10_fren);
+        let data = decode_base64("AACg11IlVCEQAQDkC1QCAAAAlsmCHAAAAAA=");
+        println!("data: {:?}", data);
+        let swap_args = SwapArgs::try_from_slice(&data).unwrap();
         assert_eq!(1_162_302_698_118_684_672, swap_args.id);
         assert_eq!(10000000000, swap_args.amount);
         assert_eq!(Side::Buy, swap_args.side);
@@ -181,7 +262,7 @@ mod tests {
             478333334,
             Side::Buy,
         );
-        assert_eq!(buy_data_10_fren, ix_data);
+        assert_eq!(data, ix_data);
 
         Ok(())
     }
@@ -189,7 +270,8 @@ mod tests {
     #[test]
     fn test_sell_instruction_data() -> Result<()> {
         let data = decode_base64("AACg11IlVCEQAgB0O6QLAAAAZcBHDgAAAAA=");
-        let swap_args = SwapArgs::try_from_slice(&data);
+        println!("data: {:?}", data);
+        let swap_args = SwapArgs::try_from_slice(&data).unwrap();
         assert_eq!(1_162_302_698_118_684_672, swap_args.id);
         assert_eq!(50000000000, swap_args.amount);
         assert_eq!(Side::Sell, swap_args.side);
@@ -217,7 +299,55 @@ mod tests {
             239583333,
             Side::Sell,
         );
+        assert_eq!(data, ix_data);
+        Ok(())
+    }
 
+    #[test]
+    fn test_withdraw_instruction_data() -> Result<()> {
+        let data = decode_base64("AACg11IlVCEQAw==");
+        println!("data: {:?}", data);
+        let withdraw_args = WithdrawArgs::try_from_slice(&data).unwrap();
+        assert_eq!(1162302698118684672, withdraw_args.id);
+
+        let ix_data = create_withdraw_instruction_data(1_011_079_790);
+        assert_ne!(data, ix_data);
+
+        let ix_data = create_withdraw_instruction_data(1162302698118684672);
+        assert_eq!(data, ix_data);
+        Ok(())
+    }
+
+    #[test]
+    fn test_verify_instruction_data() -> Result<()> {
+        let data = decode_base64("AACg11IlVCEQAApz5x/t0hNl7QruhPzk4rIGR/001ey9oRXwI9JjP4d4");
+        let owner = Pubkey::from_str("hoakwpFB8UoLnPpLC56gsjpY7XbVwaCuRQRMQzN5TVh").unwrap();
+        println!("data: {:?}", data);
+        let withdraw_args = VerifyArgs::try_from_slice(&data).unwrap();
+        assert_eq!(1162302698118684672, withdraw_args.id);
+        assert_eq!(owner, withdraw_args.owner);
+
+        let ix_data = create_verify_instruction_data(&owner, 1_011_079_790);
+        assert_ne!(data, ix_data);
+
+        let ix_data = create_verify_instruction_data(&owner, 1162302698118684672);
+        assert_eq!(data, ix_data);
+        Ok(())
+    }
+
+    #[test]
+    fn test_verify_instruction_data2() -> Result<()> {
+        let data = decode_base64("AAEwV+3E1rcUABc2N6w6zn3XiRhCfgjWLoFVBsLHDeU6zOoel4mAxqIw");
+        let owner = Pubkey::from_str("2ZcKytTHy1vRQoB1L8eCG7zxwEF4HVURnzqby3uQpW2T").unwrap();
+        println!("data: {:?}", data);
+        let withdraw_args = VerifyArgs::try_from_slice(&data).unwrap();
+        assert_eq!(1492897942780456961, withdraw_args.id);
+        assert_eq!(owner, withdraw_args.owner);
+
+        let ix_data = create_verify_instruction_data(&owner, 1_011_079_790);
+        assert_ne!(data, ix_data);
+
+        let ix_data = create_verify_instruction_data(&owner, 1492897942780456961);
         assert_eq!(data, ix_data);
         Ok(())
     }

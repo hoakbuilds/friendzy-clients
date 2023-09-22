@@ -14,6 +14,12 @@ pub struct Config {
     pub debt: u64,
 }
 
+impl Config {
+    pub fn claimed_royalties(&self) -> u64 {
+        self.royalties - self.unclaimed
+    }
+}
+
 #[derive(Debug, Default, Clone, PartialEq, AnchorSerialize, AnchorDeserialize)]
 pub struct Profile {
     pub id: u64,
@@ -24,6 +30,8 @@ pub struct Profile {
     pub sell_volume: u64,
     pub reserved: u64,
 }
+
+impl Profile {}
 
 #[cfg(test)]
 mod tests {
@@ -39,7 +47,6 @@ mod tests {
     #[test]
     fn test_load_config() -> Result<()> {
         let data = decode_base64("AKDXUiVUIRAALr5DLwAAAApz5x/t0hNl7QruhPzk4rIGR/001ey9oRXwI9JjP4d4QBxARgAAAAApndAJAAAAAAAAAAAAAAAA");
-
         let config = Config::try_from_slice(&data).unwrap();
 
         assert_eq!(
@@ -52,7 +59,8 @@ mod tests {
         assert_eq!(164666665, config.unclaimed);
         assert_eq!(0, config.debt);
 
-        println!("{:?}", config);
+        let claimed_royalties = config.claimed_royalties();
+        assert_eq!(1178606656 - 164666665, claimed_royalties);
 
         Ok(())
     }
@@ -60,7 +68,6 @@ mod tests {
     #[test]
     fn test_load_profile() -> Result<()> {
         let data = decode_base64("AKDXUiVUIRAKc+cf7dITZe0K7oT85OKyBkf9NNXsvaEV8CPSYz+HeAC4mj4KAAAAAAAAAAAAAADLyIBbAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
-
         let profile = Profile::try_from_slice(&data).unwrap();
 
         assert_eq!(
