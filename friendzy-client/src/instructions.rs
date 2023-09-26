@@ -183,35 +183,47 @@ pub async fn withdraw(
     }
 }
 
+/// Creates a "swap" instruction.
 /// Buy: [0, id, 1, amount, max_price]
 /// Sell: [0, id, 2, amount, min_price]
 fn create_swap_instruction_data(id: u64, amount: u64, price: u64, side: Side) -> Vec<u8> {
-    let mut data = Vec::new();
-    data.push(0); // 0 - padding ?
-    data.extend(id.to_le_bytes()); // 1
-    side.serialize(&mut data).unwrap(); // offset 9
-    data.extend(amount.to_le_bytes()); // 10
-    data.extend(price.to_le_bytes()); // 18
-    data
+    // 0 - optional
+    // 1 - twitter/x user_id that is commonly found in the API responses
+    // 9 - the side, either `Default` = 0 | `Buy` = 1 | `Sell` = 2 with u8 alignment or sell
+    // 10 - the amount of keys to buy, this is denominated in native units
+    // 18 - the price, !!!!! IMPORTANT !!!!! this will be `max_price` for Side == Side::Buy otherwise
+    // 26 - !!!!! IMPORTANT !!!!! there appears to be another number at the end of the instruction but we don't use it
+    [
+        vec![0],
+        id.try_to_vec().unwrap_or_default(),
+        side.try_to_vec().unwrap_or_default(),
+        amount.try_to_vec().unwrap_or_default(),
+        price.try_to_vec().unwrap_or_default(),
+    ]
+    .concat()
 }
 
 /// Withdraw: [0, id, 3]
 fn create_withdraw_instruction_data(id: u64) -> Vec<u8> {
-    let mut data = Vec::new();
-    data.push(0); // 0 - padding ?
-    data.extend(id.to_le_bytes()); // 1 - amount
-    data.push(3); // 9
-    data
+    // 0 - optional
+    // 1 - twitter/x user_id that is commonly found in the API responses
+    // 9 - instruction
+    [vec![0], id.try_to_vec().unwrap_or_default(), vec![3]].concat()
 }
 
-/// Verify: [0, id, owner]
+/// Verify: [0, id, 0, owner]
 fn create_verify_instruction_data(owner: &Pubkey, id: u64) -> Vec<u8> {
-    let mut data = Vec::new();
-    data.push(0); // 0 - padding ?
-    data.extend(id.to_le_bytes()); // 1 - amount
-    data.push(0); // 0 - padding ?
-    data.extend(owner.to_bytes()); // 9 - owner
-    data
+    // 0 - optional
+    // 1 - twitter/x user_id
+    // 9 - instruction
+    // 10 - owner
+    [
+        vec![0],
+        id.try_to_vec().unwrap_or_default(),
+        vec![0],
+        owner.try_to_vec().unwrap_or_default(),
+    ]
+    .concat()
 }
 
 #[cfg(test)]
@@ -228,7 +240,7 @@ mod tests {
     #[test]
     fn test_create_swap_instruction() -> Result<()> {
         let data = decode_base64("AACg11IlVCEQAQDkC1QCAAAAlsmCHAAAAAA=");
-        println!("data: {:?}", data);
+        println!("data: {:?} - len: {}", data, data.len());
         let swap_args = SwapArgs::try_from_slice(&data).unwrap();
         assert_eq!(1_162_302_698_118_684_672, swap_args.id);
         assert_eq!(10000000000, swap_args.amount);
