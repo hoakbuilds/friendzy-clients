@@ -12,26 +12,36 @@ import {
 } from '@coral-xyz/anchor/dist/cjs/utils/token';
 import { MPL_TOKEN_METADATA_PROGRAM_ID, PROGRAM_ID, VAULT } from '../constants';
 
-export interface InstructionArgs {
+interface InstructionData {
   version: number;
   id: bigint;
   instruction: number;
 }
 
-export interface WithdrawArgs extends InstructionArgs {}
+interface WithdrawInstructionData extends InstructionData {}
 
-export interface VerifyArgs extends InstructionArgs {
+export interface WithdrawArgs {
+  id: bigint;
+}
+
+interface VerifyInstructionData extends InstructionData {
   owner: PublicKey;
 }
 
-export interface SwapArgs extends InstructionArgs {
-  side: 'Buy' | 'Sell';
+interface SwapInstructionData extends InstructionData {
   amount: bigint;
   price: bigint;
   placeholder: number;
 }
 
-export const WithdrawInstructionDataLayout = struct<WithdrawArgs>([
+export interface SwapArgs {
+  side: 'Buy' | 'Sell';
+  id: bigint;
+  amount: bigint;
+  price: bigint;
+}
+
+const WithdrawInstructionDataLayout = struct<WithdrawInstructionData>([
   u8('version'),
   u64('id'),
   u8('instruction'),
@@ -45,12 +55,7 @@ function createWithdrawInstructionData(args: WithdrawArgs): Buffer {
   return buffer;
 }
 
-export type Side = {
-  bid?: any;
-  ask?: any;
-};
-
-export const SwapInstructionDataLayout = struct<SwapArgs>([
+const SwapInstructionDataLayout = struct<SwapInstructionData>([
   u8('version'), // 0
   u64('id'), // 1
   u8('instruction'), // 9
@@ -68,14 +73,14 @@ function createSwapInstructionData(args: SwapArgs): Buffer {
   return buffer;
 }
 
-export const VerifyInstructionDataLayout = struct<VerifyArgs>([
+const VerifyInstructionDataLayout = struct<VerifyInstructionData>([
   u8('version'),
   u64('id'),
   publicKey('owner'),
   u8('instruction'),
 ]);
 
-function createVerifyInstructionData(args: VerifyArgs): Buffer {
+function createVerifyInstructionData(args: VerifyInstructionData): Buffer {
   let buffer = Buffer.alloc(42);
   buffer[0] = 0;
   buffer.writeBigUInt64LE(args.id, 1);
@@ -137,7 +142,7 @@ export const createSwapInstruction = (
         {
           pubkey: SystemProgram.programId,
           isSigner: false,
-          isWritable: true,
+          isWritable: false,
         },
       ],
       firstPurchase
@@ -154,7 +159,7 @@ export const createSwapInstruction = (
             {
               pubkey: SystemProgram.programId,
               isSigner: false,
-              isWritable: true,
+              isWritable: false,
             },
             {
               pubkey: SystemProgram.programId,
@@ -181,7 +186,7 @@ export const createSwapInstruction = (
 };
 
 export const createVerifyInstruction = (
-  args: VerifyArgs,
+  args: VerifyInstructionData,
 ): TransactionInstruction => {
   return {
     programId: PROGRAM_ID,
@@ -239,12 +244,12 @@ export const createWithdrawInstruction = (
       {
         pubkey: SystemProgram.programId,
         isSigner: false,
-        isWritable: true,
+        isWritable: false,
       },
       {
         pubkey: SystemProgram.programId,
         isSigner: false,
-        isWritable: true,
+        isWritable: false,
       },
       {
         pubkey: SystemProgram.programId,
