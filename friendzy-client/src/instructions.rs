@@ -27,10 +27,6 @@ impl VerifyArgs {
 
         Ok(Self { id, owner })
     }
-
-    pub fn to_vec(&self) -> Vec<u8> {
-        create_verify_instruction_data(&self.owner, self.id)
-    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -51,10 +47,6 @@ impl WithdrawArgs {
         let id = u64::try_from_slice(&data[Self::ID_INDEX..Self::PADDING_INDEX]).unwrap();
 
         Ok(Self { id })
-    }
-
-    pub fn to_vec(&self) -> Vec<u8> {
-        create_withdraw_instruction_data(self.id)
     }
 }
 
@@ -89,10 +81,6 @@ impl SwapArgs {
             amount,
             price,
         })
-    }
-
-    pub fn to_vec(&self) -> Vec<u8> {
-        create_withdraw_instruction_data(self.id)
     }
 }
 
