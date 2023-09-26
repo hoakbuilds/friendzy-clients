@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+      "lib": ["es2022", "DOM"],
+      "module": "CommonJS",
+      "target": "es2020",
+      "outDir": "dist/lib",
+      "esModuleInterop": true,
+      "declaration": true,
+      "sourceMap": true,
+      "resolveJsonModule": true,
+      "skipLibCheck": true,
+      "baseUrl": ".",
+      "paths": {
+        "@keycenter-labs/friendzy-client": ["../src/index.ts"],
+        "@keycenter-labs/friendzy-client/*": ["../src/*"]
+      }
+    },
+    "include": ["src/**/*"],
+    "exclude": ["node_modules"]
+  }
+  
