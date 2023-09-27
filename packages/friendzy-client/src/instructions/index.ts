@@ -19,8 +19,6 @@ interface InstructionDataSchema {
   instruction: number;
 }
 
-interface WithdrawInstructionDataSchema extends InstructionDataSchema {}
-
 interface VerifyInstructionDataSchema extends InstructionDataSchema {
   owner: PublicKey;
 }
@@ -48,7 +46,7 @@ export interface SwapArgs {
   price: BN;
 }
 
-const WithdrawInstructionDataLayout = struct<WithdrawInstructionDataSchema>([
+const InstructionDataLayout = struct<InstructionDataSchema>([
   u8('version'),
   u64('xId'),
   u8('instruction'),
@@ -102,19 +100,17 @@ export interface InstructionDataApi {
   instruction: number;
 }
 
-export interface WithdrawInstructionDataApi {}
+export class InstructionData implements InstructionDataApi {
+  readonly state: InstructionDataSchema;
 
-export class WithdrawInstructionData implements WithdrawInstructionDataApi {
-  readonly state: WithdrawInstructionDataSchema;
-
-  constructor(state: WithdrawInstructionDataSchema) {
+  constructor(state: InstructionDataSchema) {
     this.state = state;
   }
 
   public static decode(buffer: Buffer | Uint8Array): WithdrawInstructionData {
     try {
-      const state = WithdrawInstructionDataLayout.decode(buffer);
-      return new WithdrawInstructionData(state);
+      const state = InstructionDataLayout.decode(buffer);
+      return new InstructionData(state);
     } catch (err: any) {
       throw new Error(err);
     }
@@ -122,16 +118,41 @@ export class WithdrawInstructionData implements WithdrawInstructionDataApi {
   get id(): BN {
     return new BN(this.state.xId.toString());
   }
+  get version(): number {
+    return this.state.version;
+  }
+  get instruction(): number {
+    return this.state.instruction;
+  }
 }
 
-export interface VerifyInstructionDataApi {
+export class WithdrawInstructionData extends InstructionData {
+  constructor(state: InstructionDataSchema) {
+    super(state);
+  }
+
+  public static decode(buffer: Buffer | Uint8Array): WithdrawInstructionData {
+    try {
+      const state = InstructionDataLayout.decode(buffer);
+      return new WithdrawInstructionData(state);
+    } catch (err: any) {
+      throw new Error(err);
+    }
+  }
+}
+
+export interface VerifyInstructionDataApi extends InstructionDataApi {
   owner: PublicKey;
 }
 
-export class VerifyInstructionData implements VerifyInstructionDataApi {
+export class VerifyInstructionData
+  extends InstructionData
+  implements VerifyInstructionDataApi
+{
   readonly state: VerifyInstructionDataSchema;
 
   constructor(state: VerifyInstructionDataSchema) {
+    super(state);
     this.state = state;
   }
 
@@ -151,17 +172,21 @@ export class VerifyInstructionData implements VerifyInstructionDataApi {
   }
 }
 
-export interface SwapInstructionDataApi {
+export interface SwapInstructionDataApi extends InstructionDataApi {
   side: 'Buy' | 'Sell';
   id: BN;
   amount: BN;
   price: BN;
 }
 
-export class SwapInstructionData implements SwapInstructionDataApi {
+export class SwapInstructionData
+  extends InstructionData
+  implements SwapInstructionDataApi
+{
   readonly state: SwapInstructionDataSchema;
 
   constructor(state: SwapInstructionDataSchema) {
+    super(state);
     this.state = state;
   }
 
@@ -186,6 +211,25 @@ export class SwapInstructionData implements SwapInstructionDataApi {
     return new BN(this.state.price.toString());
   }
 }
+
+export const parseInstructionData = (
+  buffer: Buffer | Uint8Array,
+): WithdrawInstructionData | VerifyInstructionData | SwapInstructionData => {
+  if (buffer[9] === 0) {
+    return VerifyInstructionData.decode(buffer);
+  }
+  if (buffer[9] === 1) {
+    return SwapInstructionData.decode(buffer);
+  }
+  if (buffer[9] === 2) {
+    return SwapInstructionData.decode(buffer);
+  }
+  if (buffer[9] === 3) {
+    return WithdrawInstructionData.decode(buffer);
+  }
+
+  throw new Error('Invalid instruction data.');
+};
 
 export const createSwapInstruction = (
   user: PublicKey,

@@ -26,7 +26,7 @@ require('dotenv').config({
 });
 
 require('dotenv').config({
-  path: __dirname + `/args.env`, // Can also be used to override default env variables
+  path: __dirname + `/.env`, // Can also be used to override default env variables
 });
 
 // Constants
