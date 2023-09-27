@@ -22,7 +22,8 @@
     "@coral-xyz/anchor": "^0.28.1-beta.2",
     "@solana/buffer-layout": "^4.0.1",
     "@solana/buffer-layout-utils": "^0.2.0",
-    "@solana/web3.js": "^1.78.5"
+    "@solana/web3.js": "^1.78.5",
+    "@metaplex-foundation/js": "^0.19.4"
   },
   "browser": {
     "./dist/index.umd.js": "./dist/index.browser.umd.js",
