@@ -1514,7 +1514,10 @@ dependencies = [
  "anchor-spl",
  "base64 0.21.4",
  "mpl-token-metadata",
+ "solana-client",
+ "solana-sdk",
  "spl-associated-token-account",
+ "tokio",
 ]
 
 [[package]]
