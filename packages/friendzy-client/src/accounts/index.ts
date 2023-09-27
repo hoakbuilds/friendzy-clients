@@ -1,5 +1,10 @@
 import { BN } from '@coral-xyz/anchor';
-import { Connection, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
+import {
+  Account,
+  Connection,
+  LAMPORTS_PER_SOL,
+  PublicKey,
+} from '@solana/web3.js';
 import { struct } from '@solana/buffer-layout';
 import { u64, publicKey } from '@solana/buffer-layout-utils';
 import { deriveConfigAddress, deriveProfileAddress } from '../utils/pda';
@@ -26,10 +31,13 @@ export interface Config extends XIdAccount {
   debt: bigint;
 }
 
-export interface ConfigApi {
+export interface AccountApi {
   id: BN;
-  supply: BN;
   owner: PublicKey;
+}
+
+export interface ConfigApi extends AccountApi {
+  supply: BN;
   royalties: BN;
   unclaimed: BN;
   debt: BN;
@@ -117,9 +125,7 @@ export interface Profile extends XIdAccount {
   reserved: bigint;
 }
 
-export interface ProfileApi {
-  id: BN;
-  owner: PublicKey;
+export interface ProfileApi extends AccountApi {
   buyAmount: BN;
   sellAmount: BN;
   buyVolume: BN;

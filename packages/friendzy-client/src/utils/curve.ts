@@ -1,12 +1,12 @@
 import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { BN } from '@coral-xyz/anchor';
 
-export function calculateKeysCost(supply: number, keysAmount: number): BN {
-  if (keysAmount < 1) {
-    return calculateFractionalKeyPrice(supply, keysAmount * 1e9);
+export function calculateKeysCost(supply: number, amount: number): BN {
+  if (amount < 1) {
+    return calculateKeyPrice(supply, amount * 1e9);
   }
-  return [...Array(keysAmount).keys()]
-    .map((i) => calculateKeyPrice(supply + i * 1e9))
+  return [...Array(amount).keys()]
+    .map(i => calculateKeyPrice(supply + i * 1e9, 1e9))
     .reduce((sum, current) => sum.add(current));
 }
 
@@ -17,32 +17,24 @@ export function calculateKeysCostUi(
   return calculateKeysCost(supply, keysAmount).toNumber() / LAMPORTS_PER_SOL;
 }
 
-export function calculateKeyPrice(supply: number): BN {
-  return curveDifference(supply, supply + 1e9);
+export function calculateKeyPrice(supply: number, supplyChange: number): BN {
+  // if supply change is negative means upply is decreasing
+  // so we want to calculate prices going down
+  if (supplyChange < 0) {
+    return curveDifference(supply - supplyChange, supply);
+  }
+  return curveDifference(supply, supply + supplyChange);
 }
 
-export function calculateFractionalKeyPrice(
+export function calculateKeyPriceUi(
   supply: number,
-  amount: number,
-): BN {
-  return curveDifference(supply, supply + amount);
-}
-
-export function calculateKeyPriceUi(supply: number): number {
-  return calculateKeyPrice(supply).toNumber() / LAMPORTS_PER_SOL;
-}
-
-export function calculateFractionalKeyPriceUi(
-  supply: number,
-  amount: number,
+  supplyChange: number,
 ): number {
-  return (
-    calculateFractionalKeyPrice(supply, amount).toNumber() / LAMPORTS_PER_SOL
-  );
+  return calculateKeyPrice(supply, supplyChange).toNumber() / LAMPORTS_PER_SOL;
 }
 
 function curveDifference(pointA: number, pointB: number): BN {
-  return curve(pointB).sub(curve(pointA));
+  return curve(pointB).sub(curve(pointA)).abs();
 }
 
 function curve(point: number): BN {

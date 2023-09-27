@@ -11,82 +11,180 @@ import {
   TOKEN_PROGRAM_ID,
 } from '@coral-xyz/anchor/dist/cjs/utils/token';
 import { MPL_TOKEN_METADATA_PROGRAM_ID, PROGRAM_ID, VAULT } from '../constants';
+import { BN } from '@coral-xyz/anchor';
 
-interface InstructionData {
+interface InstructionDataSchema {
   version: number;
-  id: bigint;
+  xId: bigint;
   instruction: number;
 }
 
-interface WithdrawInstructionData extends InstructionData {}
+interface WithdrawInstructionDataSchema extends InstructionDataSchema {}
 
-export interface WithdrawArgs {
-  id: bigint;
-}
-
-interface VerifyInstructionData extends InstructionData {
+interface VerifyInstructionDataSchema extends InstructionDataSchema {
   owner: PublicKey;
 }
 
-interface SwapInstructionData extends InstructionData {
+interface SwapInstructionDataSchema extends InstructionDataSchema {
   amount: bigint;
   price: bigint;
   placeholder: number;
 }
 
-export interface SwapArgs {
-  side: 'Buy' | 'Sell';
-  id: bigint;
-  amount: bigint;
-  price: bigint;
+export interface InstructionArgs {
+  id: BN;
 }
 
-const WithdrawInstructionDataLayout = struct<WithdrawInstructionData>([
+export interface WithdrawArgs extends InstructionArgs {}
+
+export interface VerifyArgs extends InstructionArgs {
+  owner: PublicKey;
+}
+
+export interface SwapArgs {
+  side: 'Buy' | 'Sell';
+  id: BN;
+  amount: BN;
+  price: BN;
+}
+
+const WithdrawInstructionDataLayout = struct<WithdrawInstructionDataSchema>([
   u8('version'),
-  u64('id'),
+  u64('xId'),
   u8('instruction'),
 ]);
 
-function createWithdrawInstructionData(args: WithdrawArgs): Buffer {
+export function createWithdrawInstructionData(args: WithdrawArgs): Buffer {
   const buffer = Buffer.alloc(10);
   buffer[0] = 0;
-  buffer.writeBigUInt64LE(args.id, 1);
+  args.id.toArrayLike(Buffer, 'le', 8).copy(buffer, 1);
   buffer[9] = 3;
   return buffer;
 }
 
-const SwapInstructionDataLayout = struct<SwapInstructionData>([
+const SwapInstructionDataLayout = struct<SwapInstructionDataSchema>([
   u8('version'), // 0
-  u64('id'), // 1
+  u64('xId'), // 1
   u8('instruction'), // 9
   u64('amount'), // 17
   u64('price'), // 25
 ]);
 
-function createSwapInstructionData(args: SwapArgs): Buffer {
+export function createSwapInstructionData(args: SwapArgs): Buffer {
   const buffer = Buffer.alloc(26);
   buffer[0] = 0;
-  buffer.writeBigUInt64LE(args.id, 1);
+  args.id.toArrayLike(Buffer, 'le', 8).copy(buffer, 1);
   buffer[9] = args.side === 'Buy' ? 1 : 2;
-  buffer.writeBigUInt64LE(args.amount, 10);
-  buffer.writeBigUInt64LE(args.price, 18);
+  args.amount.toArrayLike(Buffer, 'le', 8).copy(buffer, 10);
+  args.price.toArrayLike(Buffer, 'le', 8).copy(buffer, 18);
   return buffer;
 }
 
-const VerifyInstructionDataLayout = struct<VerifyInstructionData>([
+const VerifyInstructionDataLayout = struct<VerifyInstructionDataSchema>([
   u8('version'),
-  u64('id'),
-  publicKey('owner'),
+  u64('xId'),
   u8('instruction'),
+  publicKey('owner'),
 ]);
 
-function createVerifyInstructionData(args: VerifyInstructionData): Buffer {
+export function createVerifyInstructionData(args: VerifyArgs): Buffer {
   let buffer = Buffer.alloc(42);
   buffer[0] = 0;
-  buffer.writeBigUInt64LE(args.id, 1);
+  args.id.toArrayLike(Buffer, 'le', 8).copy(buffer, 1);
   buffer[9] = 0;
-  args.owner.encode().copy(buffer, 10, 0, 42);
+  Buffer.from(args.owner.toBytes()).copy(buffer, 10);
   return buffer;
+}
+
+export interface InstructionDataApi {
+  version: number;
+  id: BN;
+  instruction: number;
+}
+
+export interface WithdrawInstructionDataApi {}
+
+export class WithdrawInstructionData implements WithdrawInstructionDataApi {
+  readonly state: WithdrawInstructionDataSchema;
+
+  constructor(state: WithdrawInstructionDataSchema) {
+    this.state = state;
+  }
+
+  public static decode(buffer: Buffer | Uint8Array): WithdrawInstructionData {
+    try {
+      const state = WithdrawInstructionDataLayout.decode(buffer);
+      return new WithdrawInstructionData(state);
+    } catch (err: any) {
+      throw new Error(err);
+    }
+  }
+  get id(): BN {
+    return new BN(this.state.xId.toString());
+  }
+}
+
+export interface VerifyInstructionDataApi {
+  owner: PublicKey;
+}
+
+export class VerifyInstructionData implements VerifyInstructionDataApi {
+  readonly state: VerifyInstructionDataSchema;
+
+  constructor(state: VerifyInstructionDataSchema) {
+    this.state = state;
+  }
+
+  public static decode(buffer: Buffer | Uint8Array): VerifyInstructionData {
+    try {
+      const state = VerifyInstructionDataLayout.decode(buffer);
+      return new VerifyInstructionData(state);
+    } catch (err: any) {
+      throw new Error(err);
+    }
+  }
+  get id(): BN {
+    return new BN(this.state.xId.toString());
+  }
+  get owner(): PublicKey {
+    return this.state.owner;
+  }
+}
+
+export interface SwapInstructionDataApi {
+  side: 'Buy' | 'Sell';
+  id: BN;
+  amount: BN;
+  price: BN;
+}
+
+export class SwapInstructionData implements SwapInstructionDataApi {
+  readonly state: SwapInstructionDataSchema;
+
+  constructor(state: SwapInstructionDataSchema) {
+    this.state = state;
+  }
+
+  public static decode(buffer: Buffer | Uint8Array): SwapInstructionData {
+    try {
+      const state = SwapInstructionDataLayout.decode(buffer);
+      return new SwapInstructionData(state);
+    } catch (err: any) {
+      throw new Error(err);
+    }
+  }
+  get side(): 'Buy' | 'Sell' {
+    return this.state.instruction == 1 ? 'Buy' : 'Sell';
+  }
+  get id(): BN {
+    return new BN(this.state.xId.toString());
+  }
+  get amount(): BN {
+    return new BN(this.state.amount.toString());
+  }
+  get price(): BN {
+    return new BN(this.state.price.toString());
+  }
 }
 
 export const createSwapInstruction = (
@@ -115,7 +213,7 @@ export const createSwapInstruction = (
           isWritable: true,
         },
         {
-          pubkey: profile,
+          pubkey: config,
           isSigner: false,
           isWritable: true,
         },
@@ -125,19 +223,19 @@ export const createSwapInstruction = (
           isWritable: true,
         },
         {
-          pubkey: config,
+          pubkey: profile,
           isSigner: false,
           isWritable: true,
         },
         {
           pubkey: TOKEN_PROGRAM_ID,
           isSigner: false,
-          isWritable: true,
+          isWritable: false,
         },
         {
           pubkey: SYSVAR_RENT_PUBKEY,
           isSigner: false,
-          isWritable: true,
+          isWritable: false,
         },
         {
           pubkey: SystemProgram.programId,
@@ -166,11 +264,7 @@ export const createSwapInstruction = (
               isSigner: false,
               isWritable: false,
             },
-            {
-              pubkey: SystemProgram.programId,
-              isSigner: false,
-              isWritable: false,
-            },
+            { pubkey: tokenAccount, isSigner: false, isWritable: true },
           ],
       [
         {
@@ -186,7 +280,7 @@ export const createSwapInstruction = (
 };
 
 export const createVerifyInstruction = (
-  args: VerifyInstructionData,
+  args: VerifyArgs,
 ): TransactionInstruction => {
   return {
     programId: PROGRAM_ID,
@@ -217,7 +311,7 @@ export const createWithdrawInstruction = (
         isWritable: true,
       },
       {
-        pubkey: profile,
+        pubkey: config,
         isSigner: false,
         isWritable: true,
       },
@@ -227,19 +321,19 @@ export const createWithdrawInstruction = (
         isWritable: true,
       },
       {
-        pubkey: config,
+        pubkey: profile,
         isSigner: false,
         isWritable: true,
       },
       {
         pubkey: TOKEN_PROGRAM_ID,
         isSigner: false,
-        isWritable: true,
+        isWritable: false,
       },
       {
         pubkey: SYSVAR_RENT_PUBKEY,
         isSigner: false,
-        isWritable: true,
+        isWritable: false,
       },
       {
         pubkey: SystemProgram.programId,
