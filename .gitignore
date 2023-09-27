@@ -1,5 +1,4 @@
-/target
-*/target
+target
 .anchor
 .DS_Store
 **/*.rs.bk
@@ -7,3 +6,4 @@ node_modules
 test-ledger
 .yarn
 dist/
+.env

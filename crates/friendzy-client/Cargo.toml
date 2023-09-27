@@ -11,12 +11,8 @@ default = [ ]
 [dependencies]
 anchor-spl = "0.28.0"
 anchor-lang = "0.28.0"
-
-solana-client = "~1.16.0"
-solana-program = "~1.16.0"
-solana-program-test = "~1.16.0"
-
 mpl-token-metadata = { version = "2.0.0-beta.1" }
 
-# extra 
+[dev-dependencies]
 base64 = "0.21.4"
+spl-associated-token-account = "1.1.3"

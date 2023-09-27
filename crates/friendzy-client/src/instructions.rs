@@ -93,7 +93,7 @@ pub enum Side {
     Sell = 2,
 }
 
-pub async fn swap(
+pub fn swap(
     user: &Pubkey,
     bank: &Pubkey,
     config: &Pubkey,
@@ -110,9 +110,9 @@ pub async fn swap(
     let mut accounts = vec![
         AccountMeta::new(*user, true),                        // 0 - user
         AccountMeta::new(*bank, false),                       // 1 - bank
-        AccountMeta::new(*profile, false),                    // 2 - config
+        AccountMeta::new(*config, false),                     // 2 - config
         AccountMeta::new(*token_mint, false),                 // 3 - token mint
-        AccountMeta::new(*config, false),                     // 4 - profile
+        AccountMeta::new(*profile, false),                    // 4 - profile
         AccountMeta::new_readonly(spl_token::id(), false),    // 5 - spl token program
         AccountMeta::new_readonly(Rent::id(), false),         // 6 - rent
         AccountMeta::new_readonly(system_program::ID, false), // 7 - system program
@@ -128,7 +128,7 @@ pub async fn swap(
         accounts.extend(vec![
             AccountMeta::new_readonly(system_program::ID, false), // 8 - placeholder
             AccountMeta::new_readonly(system_program::ID, false), // 9 - placeholder
-            AccountMeta::new_readonly(system_program::ID, false), // 10 - placeholder
+            AccountMeta::new(*token_account, false),              // 10 - token account
         ])
     }
 
@@ -144,7 +144,7 @@ pub async fn swap(
     }
 }
 
-pub async fn withdraw(
+pub fn withdraw(
     user: &Pubkey,
     bank: &Pubkey,
     config: &Pubkey,
@@ -157,9 +157,9 @@ pub async fn withdraw(
         accounts: vec![
             AccountMeta::new(*user, true),                        // 0 - user
             AccountMeta::new(*bank, false),                       // 1 - bank
-            AccountMeta::new(*profile, false),                    // 2 - config
+            AccountMeta::new(*config, false),                     // 2 - config
             AccountMeta::new(*token_mint, false),                 // 3 - token mint
-            AccountMeta::new(*config, false),                     // 4 - profile
+            AccountMeta::new(*profile, false),                    // 4 - profile
             AccountMeta::new_readonly(spl_token::id(), false),    // 5 - spl token program
             AccountMeta::new_readonly(Rent::id(), false),         // 6 - rent
             AccountMeta::new_readonly(system_program::ID, false), // 7 - system program
@@ -200,6 +200,7 @@ fn create_withdraw_instruction_data(id: u64) -> Vec<u8> {
 }
 
 /// Verify: [0, id, 0, owner]
+#[allow(dead_code)]
 fn create_verify_instruction_data(owner: &Pubkey, id: u64) -> Vec<u8> {
     // 0 - optional
     // 1 - twitter/x user_id
@@ -216,10 +217,11 @@ fn create_verify_instruction_data(owner: &Pubkey, id: u64) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::*;
+    use crate::pda::*;
     use base64::{engine::general_purpose, Engine};
+    use spl_associated_token_account::get_associated_token_address;
+    use std::str::FromStr;
 
     fn decode_base64(data: &str) -> Vec<u8> {
         general_purpose::STANDARD.decode(data).unwrap()
@@ -227,6 +229,58 @@ mod tests {
 
     #[test]
     fn test_create_swap_instruction() -> Result<()> {
+        let id = 1436880221354045450;
+        let owner = Pubkey::from_str("Gf3sbc5Jb62jH7WcTr3WSNGDQLk1w6wcKMZXKK1SC1E6").unwrap();
+
+        let (bank, _) = derive_bank_address();
+        let (mint, _) = derive_mint_address(id);
+        let (config, _) = derive_config_address(id);
+        let (profile, _) = derive_profile_address(id, &owner);
+        let (metadata, _) = derive_metadata_address(&mint);
+
+        let token_account = get_associated_token_address(&owner, &mint);
+
+        let ix = swap(
+            &owner,
+            &bank,
+            &config,
+            &mint,
+            &profile,
+            &metadata,
+            &token_account,
+            false,
+            id,
+            1_000_000_000,
+            100_000_000,
+            Side::Buy,
+        );
+
+        assert_eq!(
+            ix.accounts[0].pubkey,
+            Pubkey::from_str("Gf3sbc5Jb62jH7WcTr3WSNGDQLk1w6wcKMZXKK1SC1E6").unwrap()
+        );
+        assert_eq!(
+            ix.accounts[1].pubkey,
+            Pubkey::from_str("DPVMvgcbmHz1FFFSYtoLSzQgPD59UbMguozL8RVfq5ud").unwrap()
+        );
+        assert_eq!(
+            ix.accounts[2].pubkey,
+            Pubkey::from_str("4uorXMmdWgHJXpwVpvgKhMQj3XrGuUidVD2D8J6nY3im").unwrap()
+        );
+        assert_eq!(
+            ix.accounts[3].pubkey,
+            Pubkey::from_str("7UfnA6tNvxU317xsesFJhRCUpQJ8m63ooLGKSC9m5vjp").unwrap()
+        );
+        assert_eq!(
+            ix.accounts[4].pubkey,
+            Pubkey::from_str("AkExwVartUp5NEdw8Zj5vEvaPqakMeT9fkvutRBGT6Hb").unwrap()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_swap_buy_instruction_data() -> Result<()> {
         let data = decode_base64("AACg11IlVCEQAQDkC1QCAAAAlsmCHAAAAAA=");
         println!("data: {:?} - len: {}", data, data.len());
         let swap_args = SwapArgs::try_from_slice(&data).unwrap();
@@ -247,28 +301,7 @@ mod tests {
     }
 
     #[test]
-    fn test_buy_instruction_data() -> Result<()> {
-        let data = decode_base64("AACg11IlVCEQAQDkC1QCAAAAlsmCHAAAAAA=");
-        println!("data: {:?}", data);
-        let swap_args = SwapArgs::try_from_slice(&data).unwrap();
-        assert_eq!(1_162_302_698_118_684_672, swap_args.id);
-        assert_eq!(10000000000, swap_args.amount);
-        assert_eq!(Side::Buy, swap_args.side);
-        assert_eq!(478333334, swap_args.price);
-
-        let ix_data = create_swap_instruction_data(
-            1_162_302_698_118_684_672,
-            10000000000,
-            478333334,
-            Side::Buy,
-        );
-        assert_eq!(data, ix_data);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_sell_instruction_data() -> Result<()> {
+    fn test_swap_sell_instruction_data() -> Result<()> {
         let data = decode_base64("AACg11IlVCEQAgB0O6QLAAAAZcBHDgAAAAA=");
         println!("data: {:?}", data);
         let swap_args = SwapArgs::try_from_slice(&data).unwrap();
