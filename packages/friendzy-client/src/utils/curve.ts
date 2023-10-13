@@ -34,11 +34,9 @@ export function calculateKeyPriceUi(
 }
 
 function curveDifference(pointA: number, pointB: number): BN {
-  return curve(pointB).sub(curve(pointA)).abs();
+  return new BN((curve(pointB) - curve(pointA)).toString()).abs();
 }
 
-function curve(point: number): BN {
-  return new BN(
-    Number(BigInt(595e8 + point) ** BigInt(2) / BigInt(12000000000000)),
-  );
+function curve(point: number): bigint {
+  return BigInt(595e8 + point) ** BigInt(2) / BigInt(12000000000000);
 }
