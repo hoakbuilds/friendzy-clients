@@ -22,8 +22,20 @@
     "@coral-xyz/anchor": "^0.28.1-beta.2",
     "@solana/buffer-layout": "^4.0.1",
     "@solana/buffer-layout-utils": "^0.2.0",
+    "@solana/spl-token": "^0.3.8",
     "@solana/web3.js": "^1.78.5",
-    "@metaplex-foundation/js": "^0.19.4"
+    "@metaplex-foundation/mpl-token-metadata": "^3.1.0",
+    "@metaplex-foundation/umi": "^0.8.9",
+    "@metaplex-foundation/umi-bundle-defaults": "^0.8.9",
+    "@metaplex-foundation/umi-web3js-adapters": "^0.8.9"
+  },
+  "peerDependencies": {
+    "@coral-xyz/anchor": "^0.28.1-beta.2",
+    "@solana/web3.js": "^1.78.5",
+    "@metaplex-foundation/mpl-token-metadata": "^3.1.0",
+    "@metaplex-foundation/umi": "^0.8.9",
+    "@metaplex-foundation/umi-bundle-defaults": "^0.8.9",
+    "@metaplex-foundation/umi-web3js-adapters": "^0.8.9"
   },
   "browser": {
     "./dist/index.umd.js": "./dist/index.browser.umd.js",
