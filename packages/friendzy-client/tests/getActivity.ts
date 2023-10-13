@@ -1,29 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-var-requires */
 import { delay, loadWallet } from 'utils';
-import {
-  Account,
-  Cluster,
-  Metaplex,
-  keypairIdentity,
-  parseMetadataAccount,
-  parseMintAccount,
-  toBigNumber,
-} from '@metaplex-foundation/js';
-import {
-  Connection,
-  PublicKey,
-  VersionedTransactionResponse,
-} from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID } from '@coral-xyz/anchor/dist/cjs/utils/token';
-import { BN } from '@coral-xyz/anchor';
-import {
-  MPL_TOKEN_METADATA_PROGRAM_ID,
-  PROGRAM_ID,
-  calculateKeyPriceUi,
-  deriveMetadataAddress,
-} from '../dist/lib';
-import axios from 'axios';
+import { Connection, VersionedTransactionResponse } from '@solana/web3.js';
+import { PROGRAM_ID } from '../dist/lib';
 import {
   WithdrawInstructionData,
   SwapInstructionData,
@@ -54,10 +33,6 @@ export const main = async () => {
   console.log('Wallet Public Key: ' + wallet.publicKey.toString());
 
   const connection = new Connection(RPC_URL);
-
-  const metaplex = Metaplex.make(connection, {
-    cluster: CLUSTER as Cluster,
-  }).use(keypairIdentity(wallet));
 
   const confirmedSignaturesInfo = await connection.getSignaturesForAddress(
     PROGRAM_ID,

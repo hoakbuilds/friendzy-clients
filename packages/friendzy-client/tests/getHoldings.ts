@@ -1,24 +1,21 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-var-requires */
 import { loadWallet } from 'utils';
-import {
-  Account,
-  Cluster,
-  Metaplex,
-  keypairIdentity,
-  parseMetadataAccount,
-  parseMintAccount,
-  toBigNumber,
-} from '@metaplex-foundation/js';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@coral-xyz/anchor/dist/cjs/utils/token';
 import { BN } from '@coral-xyz/anchor';
 import {
-  MPL_TOKEN_METADATA_PROGRAM_ID,
   calculateKeyPriceUi,
   deriveMetadataAddress,
-} from '../dist/lib';
+} from '@keycenter-labs/friendzy-client/utils';
+import { MPL_TOKEN_METADATA_PROGRAM_ID } from '@keycenter-labs/friendzy-client/constants';
 import axios from 'axios';
+import { Mint, unpackMint } from '@solana/spl-token';
+import {
+  TokenStandard,
+  safeFetchAllMetadata,
+} from '@metaplex-foundation/mpl-token-metadata';
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
+import { fromWeb3JsPublicKey } from '@metaplex-foundation/umi-web3js-adapters';
+import { isSome } from '@metaplex-foundation/umi';
 
 // Load  Env Variables
 require('dotenv').config({
@@ -42,14 +39,13 @@ export const main = async () => {
 
   const connection = new Connection(RPC_URL);
 
-  const metaplex = Metaplex.make(connection, {
-    cluster: CLUSTER as Cluster,
-  }).use(keypairIdentity(wallet));
+  const umi = createUmi(RPC_URL);
 
   const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-    metaplex.identity().publicKey,
+    wallet.publicKey,
     { programId: TOKEN_PROGRAM_ID },
   );
+  console.log(`Token Accounts: ${tokenAccounts.value.length}`);
 
   const tokenMints = tokenAccounts.value.map(
     ta => new PublicKey(ta.account.data.parsed['info']['mint']),
@@ -62,61 +58,52 @@ export const main = async () => {
 
   for (const i in tokenMints) {
     tokenMintAccounts.push(
-      parseMintAccount({
-        data: tokenMintsAccountInfos[i].data,
-        executable: tokenMintsAccountInfos[i].executable,
-        lamports: {
-          currency: {
-            symbol: 'SOL',
-            decimals: 9,
-          },
-          basisPoints: toBigNumber(0),
-        },
-        publicKey: tokenMints[i],
-        owner: tokenMintsAccountInfos[i].owner,
-        rentEpoch: tokenMintsAccountInfos[i].rentEpoch,
-      }),
+      unpackMint(tokenMints[i], tokenMintsAccountInfos[i]),
     );
   }
 
-  const metadatas = tokenMints.map(tm => {
-    const [metadata] = deriveMetadataAddress(MPL_TOKEN_METADATA_PROGRAM_ID, tm);
-    return metadata;
-  });
+  console.log(`Token Mint Accounts: ${tokenMintAccounts.length}`);
 
-  const metadataAccountInfos = await connection.getMultipleAccountsInfo(
-    metadatas,
-  );
+  const metadatas = [];
+
+  for (const i in tokenAccounts.value) {
+    const tokenMint = tokenMints[i];
+    const tokenAccount = tokenAccounts.value[i];
+    if (tokenAccount.account) {
+      const decimals =
+        tokenAccount.account.data.parsed['info']['tokenAmount']['decimals'];
+      if (decimals != '0') {
+        metadatas.push(
+          deriveMetadataAddress(MPL_TOKEN_METADATA_PROGRAM_ID, tokenMint),
+        );
+      }
+    }
+  }
+
+  const metadataAccounts = await safeFetchAllMetadata(umi, metadatas);
 
   const friendKeys = [];
 
-  for (const i in metadatas) {
-    const tokenMint = tokenMints[i];
-    const metadataAccountInfo = metadataAccountInfos[i];
+  for (const i in tokenAccounts.value) {
     const tokenAccount = tokenAccounts.value[i];
-    if (tokenMint && metadataAccountInfo && tokenAccount) {
-      const metadataAccount = parseMetadataAccount({
-        data: metadataAccountInfo.data,
-        executable: metadataAccountInfo.executable,
-        lamports: {
-          currency: {
-            symbol: 'SOL',
-            decimals: 9,
-          },
-          basisPoints: toBigNumber(0),
-        },
-        publicKey: metadatas[i],
-        owner: metadataAccountInfo.owner,
-        rentEpoch: metadataAccountInfo.rentEpoch,
-      });
+    const tokenMint = tokenMints[i];
+    const [metadata] = deriveMetadataAddress(
+      MPL_TOKEN_METADATA_PROGRAM_ID,
+      tokenMint,
+    );
+    const metadataAccount = metadataAccounts.filter(
+      m => m.publicKey == fromWeb3JsPublicKey(metadata),
+    )[0];
+    if (tokenMint && tokenAccount && metadataAccount) {
       if (
-        metadataAccount.data.tokenStandard == 2 &&
-        metadataAccount.data.data.uri.indexOf('api.friendzy.gg') !== -1
+        isSome(metadataAccount.tokenStandard) &&
+        metadataAccount.tokenStandard.value == TokenStandard.Fungible &&
+        metadataAccount.uri.indexOf('api.friendzy.gg') !== -1
       ) {
-        const uiAmount =
-          tokenAccount.account.data.parsed['info']['tokenAmount']['uiAmount'];
-        if (uiAmount !== 0) {
-          const id = metadataAccount.data.data.name
+        const tokenAmount =
+          tokenAccount.account.data.parsed['info']['tokenAmount'];
+        if (tokenAmount['uiAmount'] !== 0) {
+          const id = metadataAccount.name
             .split('@')[1]
             .trim()
             .replaceAll(/\0/g, '');
@@ -125,35 +112,30 @@ export const main = async () => {
           );
           let friendzyApiData = await response.data;
 
-          const tokenMintAccount = tokenMintAccounts.filter(tma =>
-            tma.publicKey.equals(tokenMint),
+          const tokenMintAccount: Mint[] = tokenMintAccounts.filter(tma =>
+            tma.address.equals(tokenMint),
           );
           const keyPrice = calculateKeyPriceUi(
-            Number(tokenMintAccount[0].data.supply.toString()),
+            Number(tokenMintAccount[0].supply.toString()),
             1e9,
           );
-          const value = keyPrice * uiAmount;
+          console.log(`Key ${friendzyApiData['name']} - Price: ${keyPrice}`);
+          const value = keyPrice * tokenAmount['uiAmount'];
           friendKeys.push({
             mint: tokenMint,
             metadata: metadatas[i],
             tokenAccount: tokenAccount.pubkey,
-            amount:
-              tokenAccount.account.data.parsed['info']['tokenAmount']['amount'],
-            decimals:
-              tokenAccount.account.data.parsed['info']['tokenAmount'][
-                'decimals'
-              ],
-            uiAmount,
-            uri: metadataAccount.data.data.uri.trim().replaceAll(/\0/g, ''),
-            symbol: metadataAccount.data.data.symbol
-              .trim()
-              .replaceAll(/\0/g, ''),
+            nativeAmount: tokenAmount['amount'],
+            decimals: tokenAmount['decimals'],
+            amount: tokenAmount['uiAmount'],
+            uri: metadataAccount.uri.trim().replaceAll(/\0/g, ''),
+            symbol: metadataAccount.symbol.trim().replaceAll(/\0/g, ''),
             id: new BN(id),
             name: friendzyApiData['name'],
             username: friendzyApiData['username'],
             keyPrice,
+            nativeValue: value,
             value: value,
-            valueFixed: value.toFixed(4),
           });
         }
       }
@@ -163,7 +145,7 @@ export const main = async () => {
   friendKeys.sort((a, b) => b.value - a.value);
 
   console.log('Holdings');
-  console.table(friendKeys, ['username', 'valueFixed']);
+  console.table(friendKeys, ['name', 'value', 'amount']);
 
   const totalPortfolioValue: number = friendKeys
     .map(fk => fk.value)
